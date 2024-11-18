@@ -32,16 +32,25 @@ from dotenv import load_dotenv
 import re
 import json
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
 # Load environment variables
 load_dotenv()
 
-# Get API key from environment
+# Initialize Anthropic client with better error handling
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-if not ANTHROPIC_API_KEY:
-    raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
+anthropic_client = None
 
-# Initialize Anthropic client
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+try:
+    if not ANTHROPIC_API_KEY:
+        logger.error("ANTHROPIC_API_KEY not found in environment variables")
+        raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
+    
+    anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+except Exception as e:
+    logger.error(f"Failed to initialize Anthropic client: {e}")
+    raise
 
 async def translate_text(text: str, target_language: str, system_prompt: str) -> Tuple[str, Dict]:
     """
@@ -74,73 +83,54 @@ async def translate_text(text: str, target_language: str, system_prompt: str) ->
         >>> print(usage)
         {"input_tokens": 10, "output_tokens": 5}
     """
-    # Crear un diccionario de códigos de idioma a nombres completos
-    language_names = {
-        "es": "Spanish",
-        "fr": "French",
-        "de": "German",
-        "ja": "Japanese",
-        "ar": "Arabic",
-        "hi": "Hindi",
-        "pt": "Portuguese",
-        "hu": "Hungarian"
-    }
-    
-    # Obtener el nombre completo del idioma
-    target_language_name = language_names.get(target_language, "English")
-    
-    system_prompt = """You are an expert financial and investment industry translator with deep knowledge of:
-    - Brokerage and trading terminology
-    - Investment products and services
-    - Financial markets and instruments
-    - Regulatory compliance terms
-    - Technical analysis concepts
+    if not anthropic_client:
+        raise RuntimeError("Anthropic client not initialized")
 
-    Key responsibilities:
-    1. Maintain precise technical accuracy
-    2. Preserve all placeholders exactly as given
-    3. Keep formatting and numerical expressions consistent
-    4. Use region-appropriate financial terminology"""
-    
-    # Obtener el prompt de traducción
-    translation_prompt = Translator.get_translation_prompt(text, target_language)
+    try:
+        # Get translation prompt
+        translation_prompt = Translator.get_translation_prompt(text, target_language)
 
-    response = client.messages.create(
-        model=os.getenv('MODEL_NAME', 'claude-3-haiku-20240307'),
-        messages=[{"role": "user", "content": translation_prompt}],
-        system=system_prompt,
-        max_tokens=int(os.getenv('MAX_TOKENS', '1024')),
-        temperature=float(os.getenv('TEMPERATURE', '0.3'))
-    )
-    
-    translated_text = response.content[0].text
-    
-    # Validación adicional: verificar que los placeholders originales están intactos
-    original_placeholders = re.findall(r'\[.*?\]', text)
-    translated_placeholders = re.findall(r'\[.*?\]', translated_text)
-    
-    if original_placeholders != translated_placeholders:
-        # Si los placeholders fueron modificados, restaurarlos
-        for orig, trans in zip(original_placeholders, translated_placeholders):
-            translated_text = translated_text.replace(trans, orig)
-    
-    return translated_text, {
-        "input_tokens": response.usage.input_tokens,
-        "output_tokens": response.usage.output_tokens
-    }
+        response = anthropic_client.messages.create(
+            model=os.getenv('MODEL_NAME', 'claude-3-haiku-20240307'),
+            messages=[{"role": "user", "content": translation_prompt}],
+            system=system_prompt,
+            max_tokens=int(os.getenv('MAX_TOKENS', '1024')),
+            temperature=float(os.getenv('TEMPERATURE', '0.3'))
+        )
+        
+        translated_text = response.content[0].text
+        
+        # Validate placeholders
+        original_placeholders = re.findall(r'\[.*?\]', text)
+        translated_placeholders = re.findall(r'\[.*?\]', translated_text)
+        
+        if original_placeholders != translated_placeholders:
+            # Restore original placeholders if modified
+            for orig, trans in zip(original_placeholders, translated_placeholders):
+                translated_text = translated_text.replace(trans, orig)
+        
+        return translated_text, {
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens
+        }
+    except Exception as e:
+        logger.error(f"Translation error: {e}")
+        raise
 
 async def evaluate_quality(source: str, translation: str, target_language: str) -> Tuple[float, Dict]:
     """Evaluates translation quality with specific criteria"""
-    
-    # Get system prompt
-    system_prompt = Translator.get_system_prompt()
-    few_shot = Translator.get_few_shot_examples()
-    eval_prompt = Translator.get_evaluation_prompt(source, translation, f"English to {target_language}")
-
-    prompt = f"{system_prompt}\n\n{few_shot}\n\n{eval_prompt}"
+    if not anthropic_client:
+        raise RuntimeError("Anthropic client not initialized")
 
     try:
-        response = client.messages.create(
+        # Get prompts
+        system_prompt = Translator.get_system_prompt()
+        few_shot = Translator.get_few_shot_examples()
+        eval_prompt = Translator.get_evaluation_prompt(source, translation, f"English to {target_language}")
+
+        prompt = f"{system_prompt}\n\n{few_shot}\n\n{eval_prompt}"
+
+        response = anthropic_client.messages.create(
             model=os.getenv('MODEL_NAME', 'claude-3-haiku-20240307'),
             messages=[{"role": "user", "content": prompt}],
             system=system_prompt,
@@ -148,33 +138,26 @@ async def evaluate_quality(source: str, translation: str, target_language: str) 
             temperature=float(os.getenv('TEMPERATURE', '0.1'))
         )
         
-        # Print response for debugging
-        print("API Response:", response.content[0].text)
-        
-        # Clean response to ensure it only contains JSON
+        # Process response
         response_text = response.content[0].text.strip()
         
         try:
-            # Find start and end of JSON
+            # Extract JSON and reasoning
             json_start = response_text.find('{')
             json_end = response_text.rfind('}') + 1
             clean_json_text = response_text[json_start:json_end]
             
             result = json.loads(clean_json_text)
             
-            # Extract reasoning that comes after JSON
+            # Get reasoning if available
             reasoning_text = response_text[json_end:].strip()
-            if "Reasoning:" in reasoning_text:
-                reasoning = reasoning_text[reasoning_text.find("Reasoning:") + 10:].strip()
-            else:
-                reasoning = "Not available"
+            reasoning = reasoning_text[reasoning_text.find("Reasoning:") + 10:].strip() if "Reasoning:" in reasoning_text else "Not available"
             
-            # Additional validation of critical elements
+            # Validate score
             score = result["score"]
             if not result.get("analysis", {}).get("placeholder_check"):
-                score = score * 0.5  # Heavily penalize placeholder issues
+                score = score * 0.5  # Penalize placeholder issues
             
-            # Ensure score is between 0 and 100
             score = max(0, min(100, score))
             
             return score, {
@@ -184,7 +167,7 @@ async def evaluate_quality(source: str, translation: str, target_language: str) 
             }
             
         except json.JSONDecodeError as e:
-            logging.error(f"JSON decode error: {e}")
+            logger.error(f"JSON decode error: {e}")
             return 50, {
                 "input_tokens": response.usage.input_tokens,
                 "output_tokens": response.usage.output_tokens,
@@ -192,7 +175,7 @@ async def evaluate_quality(source: str, translation: str, target_language: str) 
             }
             
     except Exception as e:
-        logging.error(f"Quality evaluation failed: {e}")
+        logger.error(f"Quality evaluation failed: {e}")
         return 50, {
             "input_tokens": 0,
             "output_tokens": 0,
