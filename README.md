@@ -134,3 +134,24 @@ translation-service/
 - `GET /evaluate/config`: Evaluation configuration
 - `GET /evaluate/html`: Run evaluation with HTML results
 - `GET /evaluate`: Run evaluation with JSON results
+
+## Environment Setup
+
+1. Copy the example environment file:
+```bash
+cp .env.example .env
+```
+
+2. Configure your environment variables:
+- Get your API key from [Anthropic](https://console.anthropic.com/)
+- Update `.env` with your API key and any custom settings
+- Required variables are:
+  - `ANTHROPIC_API_KEY`: Your Claude API key
+  - `MODEL_NAME`: Claude model version
+  - `MAX_TOKENS`: Maximum response length
+  - `TEMPERATURE`: Model creativity (0.0-1.0)
+
+3. Optional variables:
+  - `QUALITY_EVALUATION_ENABLED`: Enable quality checks
+  - `ENVIRONMENT`: Set to 'production' in prod
+  - `PORT`: Custom port (default: 8000)
