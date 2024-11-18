@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Translation Service</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        select {
+            padding: 5px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        #translatedText {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .section {
+            margin-top: 10px;
+            padding: 10px;
+            border-top: 1px solid #ddd;
+        }
+        .small-text {
+            font-size: 0.9em;
+            color: #666;
+        }
+        h1, h3, h4 {
+            color: #333;
+        }
+        .translation-output {
+            font-size: 1.3em;
+            font-weight: 500;
+            color: #2c3e50;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+        }
+        
+        .section-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #495057;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .reasoning-text {
+            font-size: 0.9em;
+            color: #666;
+            line-height: 1.5;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            white-space: pre-line;
+        }
+        
+        .metrics {
+            font-size: 0.9em;
+            color: #495057;
+        }
+        
+        .costs-section {
+            font-size: 0.8em;
+            color: #6c757d;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .nav-links {
+            margin-top: 10px;
+            margin-bottom: 20px;
+            padding: 10px 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .nav-links a {
+            color: #007bff;
+            text-decoration: none;
+            font-size: 0.9em;
+            transition: color 0.3s;
+        }
+        
+        .nav-links a:hover {
+            color: #0056b3;
+            text-decoration: underline;
+        }
+        
+        .nav-links i {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Translation Service</h1>
+        <div class="nav-links">
+            <a href="/evaluate/config">
+                <i>📊</i> Go to Translation Evaluation
+            </a>
+        </div>
+        <form id="translationForm">
+            <div>
+                <label for="text">Text to translate:</label>
+                <textarea id="text" required></textarea>
+            </div>
+            <div>
+                <label for="target_language">Target language:</label>
+                <select id="target_language" required>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="ja">Japanese</option>
+                    <option value="ar">Arabic</option>
+                    <option value="hi">Hindi</option>
+                    <option value="pt">Portuguese</option>
+                    <option value="hu">Hungarian</option>
+                </select>
+            </div>
+            <button type="submit">Translate</button>
+        </form>
+        <div id="result">
+            <h3 class="section-title">Translation:</h3>
+            <div class="translation-output" id="translatedText"></div>
+            
+            <div class="metrics">
+                <p>Quality: <span id="qualityScore"></span></p>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">Reasoning:</div>
+                <div class="reasoning-text" id="reasoning"></div>
+            </div>
+            
+            <div class="costs-section">
+                <p class="small-text">Processing time: <span id="processingTime"></span> seconds</p>
+                <h4>Costs:</h4>
+                <p>Translation: $<span id="translationCost"></span></p>
+                <p>Evaluation: $<span id="evaluationCost"></span></p>
+                <p>Total: $<span id="totalCost"></span></p>
+                <p>Tokens used: <span id="totalTokens"></span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('translationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const text = document.getElementById('text').value;
+            const target_language = document.getElementById('target_language').value;
+            
+            try {
+                const response = await fetch('/translate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text,
+                        target_language
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('result').style.display = 'block';
+                    document.getElementById('translatedText').textContent = data.translated_text;
+                    document.getElementById('qualityScore').textContent = 
+                        data.quality_score.toFixed(1) + '%';
+                    document.getElementById('reasoning').textContent = data.reasoning || "No available";
+                    document.getElementById('processingTime').textContent = 
+                        data.processing_time.toFixed(2);
+                    
+                    document.getElementById('translationCost').textContent = 
+                        data.costs.translation.total_cost.toFixed(4);
+                    document.getElementById('evaluationCost').textContent = 
+                        data.costs.quality_evaluation.total_cost.toFixed(4);
+                    document.getElementById('totalCost').textContent = 
+                        data.costs.total.total_cost.toFixed(4);
+                    document.getElementById('totalTokens').textContent = 
+                        `${data.costs.total.input_tokens} input + ${data.costs.total.output_tokens} output`;
+                } else {
+                    alert('Error: ' + data.detail);
+                }
+            } catch (error) {
+                alert('Error during translation: ' + error);
+            }
+        });
+    </script>
+</body>
+</html> 

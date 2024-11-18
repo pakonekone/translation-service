@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+pandas
+deep-translator
+python-dotenv
+anthropic
+jinja2

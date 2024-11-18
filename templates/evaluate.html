@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Translation Evaluation</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 20px;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .config-panel {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        select, input {
+            padding: 8px;
+            width: 200px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        button {
+            background-color: #2196F3;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #1976D2;
+        }
+        #results {
+            margin-top: 20px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .score {
+            color: #2196F3;
+            font-weight: bold;
+        }
+        .hu-reference {
+            background-color: #e8f5e9;
+        }
+        .loading {
+            display: none;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .results-container {
+            margin-top: 30px;
+        }
+        
+        .summary {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .summary p {
+            margin: 8px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background-color: white;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #dee2e6;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .score {
+            color: #2196F3;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="nav-links">
+        <a href="/">
+            <i>🏠</i> Back to Translation
+        </a>
+    </div>
+    
+    <h1>Translation Evaluation</h1>
+    
+    <div class="config-panel">
+        <div class="form-group">
+            <label for="num_texts">Number of texts to evaluate:</label>
+            <input type="number" id="num_texts" min="1" max="10" value="2">
+        </div>
+        
+        <div class="form-group">
+            <label for="languages">Languages to evaluate:</label>
+            <select id="languages" multiple>
+                <option value="es" selected>Spanish</option>
+                <option value="fr" selected>French</option>
+                <option value="de" selected>German</option>
+                <option value="hu" selected>Hungarian</option>
+            </select>
+        </div>
+        
+        <button onclick="runEvaluation()">Run Evaluation</button>
+    </div>
+
+    <div id="loading" class="loading">
+        Evaluating translations... Please wait...
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        async function runEvaluation() {
+            const numTexts = document.getElementById('num_texts').value;
+            const languages = Array.from(document.getElementById('languages').selectedOptions)
+                                 .map(option => option.value);
+            
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').innerHTML = '';
+            
+            try {
+                const response = await fetch(`/evaluate/html?limit=${numTexts}&languages=${languages.join(',')}`);
+                if (!response.ok) {
+                    throw new Error('Error in evaluation');
+                }
+                const html = await response.text();
+                document.getElementById('results').innerHTML = html;
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('results').innerHTML = 
+                    '<div class="error">Error running the evaluation</div>';
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html> 

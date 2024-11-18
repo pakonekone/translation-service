@@ -1,0 +1,108 @@
+<div class="results-container">
+    <div class="nav-links">
+        <a href="/">
+            <i>🏠</i> Back to Translation
+        </a>
+    </div>
+    
+    <h2>Results Summary</h2>
+    <div class="summary">
+        <p><strong>Texts evaluated:</strong> {{ num_texts }}</p>
+        <p><strong>Languages:</strong> {{ languages }}</p>
+        <p><strong>Average quality:</strong> {{ "%.1f"|format(avg_quality) }}%</p>
+    </div>
+    
+    <h2>Translations</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Original</th>
+                <th>Language</th>
+                <th>Claude Translation</th>
+                <th>Google Translation</th>
+                <th>Quality</th>
+                <th>HU Reference</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in results %}
+            <tr>
+                <td>{{ row.original }}</td>
+                <td>{{ row.language }}</td>
+                <td>{{ row.our_translation }}</td>
+                <td>{{ row.google_translation }}</td>
+                <td class="score">{{ "%.1f"|format(row.quality_score) }}%</td>
+                <td>{{ row.hungarian_reference if row.language == 'hu' else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+    .results-container {
+        margin: 20px;
+        font-family: Arial, sans-serif;
+    }
+    
+    .summary {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .summary p {
+        margin: 8px 0;
+    }
+    
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        background-color: white;
+    }
+    
+    th, td {
+        padding: 12px;
+        text-align: left;
+        border: 1px solid #dee2e6;
+    }
+    
+    th {
+        background-color: #f8f9fa;
+        font-weight: bold;
+    }
+    
+    tr:nth-child(even) {
+        background-color: #f8f9fa;
+    }
+    
+    .score {
+        color: #2196F3;
+        font-weight: bold;
+    }
+    
+    .nav-links {
+        margin: 20px 0;
+    }
+    
+    .nav-links a {
+        color: #007bff;
+        text-decoration: none;
+        font-size: 0.9em;
+        transition: color 0.3s;
+    }
+    
+    .nav-links a:hover {
+        color: #0056b3;
+        text-decoration: underline;
+    }
+    
+    .reasoning {
+        font-size: 0.9em;
+        color: #666;
+        max-width: 300px;
+        white-space: pre-line;
+    }
+</style> 
