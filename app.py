@@ -24,6 +24,18 @@ from utils.costs import calculate_costs, log_translation_request
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# Cargar variables de entorno solo en desarrollo
+if os.getenv('ENVIRONMENT') != 'production':
+    from dotenv import load_dotenv
+    load_dotenv()
+    logger.info("Loaded environment variables from .env file")
+
+# Verificar variables críticas
+REQUIRED_ENV_VARS = ['ANTHROPIC_API_KEY', 'MODEL_NAME', 'MAX_TOKENS']
+missing_vars = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
+if missing_vars:
+    logger.warning(f"Missing required environment variables: {', '.join(missing_vars)}")
+
 def install_and_import_translator():
     try:
         from deep_translator import GoogleTranslator
@@ -86,60 +98,73 @@ async def handle_translation(request: TranslationRequest):
     import time
     start_time = time.time()
     
-    # Log request
-    log_translation_request(request.text, request.target_language)
-    
     try:
-        # Translate
-        translated_text, translation_usage = await translate_text(
-            request.text,
-            request.target_language,
-            Translator.get_translation_prompt(request.text, request.target_language)
-        )
+        # Verificar estado del servicio
+        health = await health_check()
+        if health["status"] != "healthy":
+            raise HTTPException(
+                status_code=503,
+                detail="Translation service not properly configured"
+            )
+            
+        # Log request
+        log_translation_request(request.text, request.target_language)
         
-        # Calculate translation costs
-        translation_costs = calculate_costs(
-            translation_usage["input_tokens"],
-            translation_usage["output_tokens"]
-        )
-        
-        # Evaluate quality if enabled
-        quality_score = 0.0
-        quality_costs = {"input_tokens": 0, "output_tokens": 0, "input_cost": 0, "output_cost": 0, "total_cost": 0}
-        reasoning = "No disponible"
-        
-        if os.getenv('QUALITY_EVALUATION_ENABLED', 'true').lower() == 'true':
-            quality_score, quality_usage = await evaluate_quality(
+        try:
+            # Translate
+            translated_text, translation_usage = await translate_text(
                 request.text,
-                translated_text,
-                request.target_language
+                request.target_language,
+                Translator.get_translation_prompt(request.text, request.target_language)
             )
-            quality_costs = calculate_costs(
-                quality_usage["input_tokens"],
-                quality_usage["output_tokens"]
+            
+            # Calculate translation costs
+            translation_costs = calculate_costs(
+                translation_usage["input_tokens"],
+                translation_usage["output_tokens"]
             )
-            reasoning = quality_usage.get("reasoning", "No disponible")
-        
-        # Calculate total costs
-        total_costs = {
-            "translation": translation_costs,
-            "quality_evaluation": quality_costs,
-            "total": {
-                "input_tokens": translation_costs["input_tokens"] + quality_costs["input_tokens"],
-                "output_tokens": translation_costs["output_tokens"] + quality_costs["output_tokens"],
-                "total_cost": translation_costs["total_cost"] + quality_costs["total_cost"]
+            
+            # Evaluate quality if enabled
+            quality_score = 0.0
+            quality_costs = {"input_tokens": 0, "output_tokens": 0, "input_cost": 0, "output_cost": 0, "total_cost": 0}
+            reasoning = "No disponible"
+            
+            if os.getenv('QUALITY_EVALUATION_ENABLED', 'true').lower() == 'true':
+                quality_score, quality_usage = await evaluate_quality(
+                    request.text,
+                    translated_text,
+                    request.target_language
+                )
+                quality_costs = calculate_costs(
+                    quality_usage["input_tokens"],
+                    quality_usage["output_tokens"]
+                )
+                reasoning = quality_usage.get("reasoning", "No disponible")
+            
+            # Calculate total costs
+            total_costs = {
+                "translation": translation_costs,
+                "quality_evaluation": quality_costs,
+                "total": {
+                    "input_tokens": translation_costs["input_tokens"] + quality_costs["input_tokens"],
+                    "output_tokens": translation_costs["output_tokens"] + quality_costs["output_tokens"],
+                    "total_cost": translation_costs["total_cost"] + quality_costs["total_cost"]
+                }
             }
-        }
-        
-        return TranslationResponse(
-            translated_text=translated_text,
-            quality_score=quality_score,
-            target_language=request.target_language,
-            processing_time=time.time() - start_time,
-            costs=total_costs,
-            reasoning=reasoning
-        )
-        
+            
+            return TranslationResponse(
+                translated_text=translated_text,
+                quality_score=quality_score,
+                target_language=request.target_language,
+                processing_time=time.time() - start_time,
+                costs=total_costs,
+                reasoning=reasoning
+            )
+            
+        except Exception as e:
+            logger.error(f"Translation error: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e))
+
     except Exception as e:
         logger.error(f"Translation error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -259,6 +284,19 @@ async def run_evaluation_html(
     Endpoint to evaluate translations and return HTML results.
     """
     try:
+        # Verificar estado del servicio
+        health = await health_check()
+        if health["status"] != "healthy":
+            return templates.TemplateResponse(
+                "error.html",
+                {
+                    "request": request,
+                    "error": "Service Configuration Error",
+                    "details": "Translation service is not properly configured"
+                },
+                status_code=503
+            )
+            
         # Load texts and Hungarian references from CSV
         try:
             df = pd.read_csv('translated_output.csv')
@@ -337,6 +375,23 @@ async def run_evaluation_html(
     except Exception as e:
         logger.error(f"Error in evaluation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    from services.translator import AnthropicClient
+    
+    env_status = {var: bool(os.getenv(var)) for var in REQUIRED_ENV_VARS}
+    client = AnthropicClient.get_client()
+    
+    return {
+        "status": "healthy" if client else "degraded",
+        "environment": env_status,
+        "services": {
+            "anthropic": "configured" if client else "not configured",
+            "google_translate": "available" if GoogleTranslator else "not available"
+        }
+    }
 
 # Get port from Railway
 port = int(os.getenv("PORT", 8000))
