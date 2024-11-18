@@ -60,19 +60,6 @@ uvicorn app:app --reload
 - Translation interface: http://localhost:8000
 - Evaluation interface: http://localhost:8000/evaluate/config
 
-## Language Prioritization Strategy
-
-Our language prioritization is based on:
-
-1. Market size and financial activity
-2. Technical complexity
-3. Available reference data
-4. Cost optimization
-
-Priority tiers:
-- **Tier 1**: Spanish, French, German (largest markets, similar structures)
-- **Tier 2**: Japanese, Arabic (major markets, different scripts)
-- **Tier 3**: Hindi, Portuguese (growing markets)
 
 ## Quality Evaluation Methodology
 
