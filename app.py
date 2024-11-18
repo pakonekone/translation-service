@@ -1,6 +1,8 @@
 """
 Translation Service API
-A simple web service for text translation using Claude API
+A simple web service for text translation using Claude API.
+The service is designed to handle financial and technical translations
+while preserving special formatting and placeholders.
 """
 
 from fastapi import FastAPI, HTTPException, Request, Query
@@ -20,23 +22,27 @@ import pathlib
 from services.translator import translate_text, evaluate_quality, Translator
 from utils.costs import calculate_costs, log_translation_request
 
-# Configurar logging
+# Configure logging for the application
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# Cargar variables de entorno solo en desarrollo
+# Load environment variables only in development mode
 if os.getenv('ENVIRONMENT') != 'production':
     from dotenv import load_dotenv
     load_dotenv()
     logger.info("Loaded environment variables from .env file")
 
-# Verificar variables críticas
+# Check for required environment variables
 REQUIRED_ENV_VARS = ['ANTHROPIC_API_KEY', 'MODEL_NAME', 'MAX_TOKENS']
 missing_vars = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
 if missing_vars:
     logger.warning(f"Missing required environment variables: {', '.join(missing_vars)}")
 
 def install_and_import_translator():
+    """
+    Attempts to import or install the Google Translator library.
+    Returns the GoogleTranslator class if successful, None otherwise.
+    """
     try:
         from deep_translator import GoogleTranslator
         return GoogleTranslator
@@ -50,12 +56,12 @@ def install_and_import_translator():
             logger.error(f"Failed to install deep-translator: {e}")
             return None
 
-# Intentar importar GoogleTranslator
+# Initialize Google Translator
 GoogleTranslator = install_and_import_translator()
 
 app = FastAPI()
 
-# Update static and template paths to be relative to the app
+# Configure static files and templates with relative paths
 BASE_DIR = pathlib.Path(__file__).parent
 STATIC_DIR = BASE_DIR / "static"
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -63,8 +69,18 @@ TEMPLATES_DIR = BASE_DIR / "templates"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-# Función auxiliar para la traducción de Google
 def get_google_translation(text: str, target_lang: str) -> str:
+    """
+    Helper function for Google translation.
+    Falls back gracefully if the service is not available.
+    
+    Args:
+        text: Source text to translate
+        target_lang: Target language code
+        
+    Returns:
+        str: Translated text or error message
+    """
     if not GoogleTranslator:
         return "Google Translate not available"
     try:
@@ -74,12 +90,14 @@ def get_google_translation(text: str, target_lang: str) -> str:
         logger.error(f"Error in Google translation: {str(e)}")
         return f"Translation failed: {str(e)}"
 
-# Models
+# Data models for API requests and responses
 class TranslationRequest(BaseModel):
+    """Request model for translation endpoint"""
     text: str
     target_language: str
 
 class TranslationResponse(BaseModel):
+    """Response model for translation endpoint"""
     translated_text: str
     quality_score: float
     source_language: str = "en"
@@ -88,18 +106,23 @@ class TranslationResponse(BaseModel):
     costs: Dict
     reasoning: str
 
-# Routes
+# API Routes
 @app.get("/")
 async def read_root():
+    """Serve the main translation interface"""
     return FileResponse("static/index.html")
 
 @app.post("/translate", response_model=TranslationResponse)
 async def handle_translation(request: TranslationRequest):
+    """
+    Handle translation requests.
+    Includes quality evaluation and cost tracking.
+    """
     import time
     start_time = time.time()
     
     try:
-        # Verificar estado del servicio
+        # Check service health status
         health = await health_check()
         if health["status"] != "healthy":
             return TranslationResponse(
@@ -303,7 +326,7 @@ async def run_evaluation_html(
     Endpoint to evaluate translations and return HTML results.
     """
     try:
-        # Verificar estado del servicio
+        # Check service health status
         health = await health_check()
         if health["status"] != "healthy":
             return templates.TemplateResponse(
@@ -336,7 +359,7 @@ async def run_evaluation_html(
                     'language': lang,
                     'our_translation': '',  # Will be filled with Claude translation
                     'google_translation': '',  # Will be filled with Google translation
-                    'quality_score': 0.0,  # Will be filled with quality evaluation
+                    'quality_score': 0.0,  # Will be filled with quality evaluation for the Claude translation
                     'hungarian_reference': hu_dict.get(text, '') if lang == 'hu' else ''
                 })
 
@@ -397,10 +420,13 @@ async def run_evaluation_html(
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """
+    Health check endpoint to verify service configuration and dependencies.
+    Returns status of environment variables and external services.
+    """
     from services.translator import AnthropicClient
     
-    # Verificar variables de entorno
+    # Check environment variables
     env_vars = {
         "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
         "MODEL_NAME": os.getenv("MODEL_NAME", "claude-3-haiku-20240307"),
@@ -408,7 +434,7 @@ async def health_check():
         "TEMPERATURE": os.getenv("TEMPERATURE", "0.3")
     }
     
-    # Verificar cliente Anthropic
+    # Check Anthropic client availability
     client = AnthropicClient.get_client()
     
     is_healthy = all([
@@ -425,10 +451,10 @@ async def health_check():
         }
     }
 
-# Get port from Railway
+# Configure server port (for Railway deployment)
 port = int(os.getenv("PORT", 8000))
 
-# At the bottom of app.py, add this if you're running the app directly:
+# Run the application (development mode)
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=port)
