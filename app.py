@@ -102,9 +102,17 @@ async def handle_translation(request: TranslationRequest):
         # Verificar estado del servicio
         health = await health_check()
         if health["status"] != "healthy":
-            raise HTTPException(
-                status_code=503,
-                detail="Translation service not properly configured"
+            return TranslationResponse(
+                translated_text="Service not configured",
+                quality_score=0.0,
+                target_language=request.target_language,
+                processing_time=time.time() - start_time,
+                costs={
+                    "translation": {"total_cost": 0},
+                    "quality_evaluation": {"total_cost": 0},
+                    "total": {"total_cost": 0}
+                },
+                reasoning="Translation service not properly configured"
             )
             
         # Log request
@@ -162,11 +170,22 @@ async def handle_translation(request: TranslationRequest):
             )
             
         except Exception as e:
-            logger.error(f"Translation error: {str(e)}", exc_info=True)
-            raise HTTPException(status_code=500, detail=str(e))
-
+            logger.error(f"Translation error: {str(e)}")
+            return TranslationResponse(
+                translated_text=f"Translation failed: {str(e)}",
+                quality_score=0.0,
+                target_language=request.target_language,
+                processing_time=time.time() - start_time,
+                costs={
+                    "translation": {"total_cost": 0},
+                    "quality_evaluation": {"total_cost": 0},
+                    "total": {"total_cost": 0}
+                },
+                reasoning=str(e)
+            )
+            
     except Exception as e:
-        logger.error(f"Translation error: {str(e)}", exc_info=True)
+        logger.error(f"Service error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/evaluate")
@@ -381,12 +400,25 @@ async def health_check():
     """Health check endpoint"""
     from services.translator import AnthropicClient
     
-    env_status = {var: bool(os.getenv(var)) for var in REQUIRED_ENV_VARS}
+    # Verificar variables de entorno
+    env_vars = {
+        "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
+        "MODEL_NAME": os.getenv("MODEL_NAME", "claude-3-haiku-20240307"),
+        "MAX_TOKENS": os.getenv("MAX_TOKENS", "1024"),
+        "TEMPERATURE": os.getenv("TEMPERATURE", "0.3")
+    }
+    
+    # Verificar cliente Anthropic
     client = AnthropicClient.get_client()
     
+    is_healthy = all([
+        env_vars["ANTHROPIC_API_KEY"],
+        client is not None
+    ])
+    
     return {
-        "status": "healthy" if client else "degraded",
-        "environment": env_status,
+        "status": "healthy" if is_healthy else "degraded",
+        "environment": {k: "configured" if v else "missing" for k, v in env_vars.items()},
         "services": {
             "anthropic": "configured" if client else "not configured",
             "google_translate": "available" if GoogleTranslator else "not available"
