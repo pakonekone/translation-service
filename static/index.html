@@ -134,6 +134,38 @@
         .nav-links i {
             margin-right: 5px;
         }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            margin-top: 10px;
+            color: #666;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Disable form during translation */
+        .processing {
+            opacity: 0.6;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -164,6 +196,12 @@
             </div>
             <button type="submit">Translate</button>
         </form>
+
+        <div id="loading" class="loading">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Processing translation...</div>
+        </div>
+
         <div id="result">
             <h3 class="section-title">Translation:</h3>
             <div class="translation-output" id="translatedText"></div>
@@ -192,6 +230,15 @@
         document.getElementById('translationForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            const form = document.getElementById('translationForm');
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            
+            // Show loading, hide result, disable form
+            form.classList.add('processing');
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            
             const text = document.getElementById('text').value;
             const target_language = document.getElementById('target_language').value;
             
@@ -210,11 +257,10 @@
                 const data = await response.json();
                 
                 if (response.ok) {
-                    document.getElementById('result').style.display = 'block';
                     document.getElementById('translatedText').textContent = data.translated_text;
                     document.getElementById('qualityScore').textContent = 
                         data.quality_score.toFixed(1) + '%';
-                    document.getElementById('reasoning').textContent = data.reasoning || "No available";
+                    document.getElementById('reasoning').textContent = data.reasoning || "Not available";
                     document.getElementById('processingTime').textContent = 
                         data.processing_time.toFixed(2);
                     
@@ -226,11 +272,17 @@
                         data.costs.total.total_cost.toFixed(4);
                     document.getElementById('totalTokens').textContent = 
                         `${data.costs.total.input_tokens} input + ${data.costs.total.output_tokens} output`;
+                    
+                    result.style.display = 'block';
                 } else {
                     alert('Error: ' + data.detail);
                 }
             } catch (error) {
                 alert('Error during translation: ' + error);
+            } finally {
+                // Hide loading and enable form regardless of result
+                loading.style.display = 'none';
+                form.classList.remove('processing');
             }
         });
     </script>
