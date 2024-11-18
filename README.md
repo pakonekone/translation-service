@@ -16,7 +16,7 @@ A professional translation service powered by Claude AI, specifically designed f
 1. Clone the repository:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/pakonekone/translation-service.git
 cd translation-service
 ```
 
