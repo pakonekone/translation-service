@@ -26,7 +26,7 @@ Usage:
 
 import anthropic
 import logging
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Optional
 import os
 from dotenv import load_dotenv
 import re
@@ -38,19 +38,20 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Initialize Anthropic client with better error handling
-ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-anthropic_client = None
-
-try:
-    if not ANTHROPIC_API_KEY:
-        logger.error("ANTHROPIC_API_KEY not found in environment variables")
-        raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
+class AnthropicClient:
+    _instance: Optional[anthropic.Anthropic] = None
     
-    anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-except Exception as e:
-    logger.error(f"Failed to initialize Anthropic client: {e}")
-    raise
+    @classmethod
+    def get_client(cls) -> Optional[anthropic.Anthropic]:
+        """Get or initialize Anthropic client"""
+        if cls._instance is None:
+            api_key = os.getenv('ANTHROPIC_API_KEY')
+            if api_key:
+                try:
+                    cls._instance = anthropic.Anthropic(api_key=api_key)
+                except Exception as e:
+                    logger.error(f"Failed to initialize Anthropic client: {e}")
+        return cls._instance
 
 async def translate_text(text: str, target_language: str, system_prompt: str) -> Tuple[str, Dict]:
     """
@@ -83,14 +84,20 @@ async def translate_text(text: str, target_language: str, system_prompt: str) ->
         >>> print(usage)
         {"input_tokens": 10, "output_tokens": 5}
     """
-    if not anthropic_client:
-        raise RuntimeError("Anthropic client not initialized")
+    client = AnthropicClient.get_client()
+    if not client:
+        logger.error("Anthropic client not initialized - check ANTHROPIC_API_KEY")
+        return "Translation service unavailable", {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "error": "Service not configured"
+        }
 
     try:
         # Get translation prompt
         translation_prompt = Translator.get_translation_prompt(text, target_language)
 
-        response = anthropic_client.messages.create(
+        response = client.messages.create(
             model=os.getenv('MODEL_NAME', 'claude-3-haiku-20240307'),
             messages=[{"role": "user", "content": translation_prompt}],
             system=system_prompt,
@@ -115,12 +122,21 @@ async def translate_text(text: str, target_language: str, system_prompt: str) ->
         }
     except Exception as e:
         logger.error(f"Translation error: {e}")
-        raise
+        return f"Translation failed: {str(e)}", {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "error": str(e)
+        }
 
 async def evaluate_quality(source: str, translation: str, target_language: str) -> Tuple[float, Dict]:
     """Evaluates translation quality with specific criteria"""
-    if not anthropic_client:
-        raise RuntimeError("Anthropic client not initialized")
+    client = AnthropicClient.get_client()
+    if not client:
+        return 50, {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "reasoning": "Service not configured"
+        }
 
     try:
         # Get prompts
@@ -130,7 +146,7 @@ async def evaluate_quality(source: str, translation: str, target_language: str) 
 
         prompt = f"{system_prompt}\n\n{few_shot}\n\n{eval_prompt}"
 
-        response = anthropic_client.messages.create(
+        response = client.messages.create(
             model=os.getenv('MODEL_NAME', 'claude-3-haiku-20240307'),
             messages=[{"role": "user", "content": prompt}],
             system=system_prompt,
