@@ -28,15 +28,12 @@ import anthropic
 import logging
 from typing import Tuple, Dict, Optional
 import os
-from dotenv import load_dotenv
 import re
 import json
+from fastapi import HTTPException
 
 # Configure logging
 logger = logging.getLogger(__name__)
-
-# Load environment variables
-load_dotenv()
 
 class AnthropicClient:
     _instance: Optional[anthropic.Anthropic] = None
@@ -46,11 +43,16 @@ class AnthropicClient:
         """Get or initialize Anthropic client"""
         if cls._instance is None:
             api_key = os.getenv('ANTHROPIC_API_KEY')
-            if api_key:
-                try:
-                    cls._instance = anthropic.Anthropic(api_key=api_key)
-                except Exception as e:
-                    logger.error(f"Failed to initialize Anthropic client: {e}")
+            if not api_key:
+                logger.error("ANTHROPIC_API_KEY not found in environment variables")
+                return None
+                
+            try:
+                cls._instance = anthropic.Anthropic(api_key=api_key)
+            except Exception as e:
+                logger.error(f"Failed to initialize Anthropic client: {e}")
+                return None
+                
         return cls._instance
 
 async def translate_text(text: str, target_language: str, system_prompt: str) -> Tuple[str, Dict]:
@@ -86,12 +88,10 @@ async def translate_text(text: str, target_language: str, system_prompt: str) ->
     """
     client = AnthropicClient.get_client()
     if not client:
-        logger.error("Anthropic client not initialized - check ANTHROPIC_API_KEY")
-        return "Translation service unavailable", {
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "error": "Service not configured"
-        }
+        raise HTTPException(
+            status_code=503,
+            detail="Translation service unavailable - check configuration"
+        )
 
     try:
         # Get translation prompt
