@@ -15,6 +15,7 @@ import re
 import logging
 import sys
 import subprocess
+import pathlib
 
 from services.translator import translate_text, evaluate_quality, Translator
 from utils.costs import calculate_costs, log_translation_request
@@ -41,8 +42,14 @@ def install_and_import_translator():
 GoogleTranslator = install_and_import_translator()
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+
+# Update static and template paths to be relative to the app
+BASE_DIR = pathlib.Path(__file__).parent
+STATIC_DIR = BASE_DIR / "static"
+TEMPLATES_DIR = BASE_DIR / "templates"
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 # Función auxiliar para la traducción de Google
 def get_google_translation(text: str, target_lang: str) -> str:
@@ -330,3 +337,11 @@ async def run_evaluation_html(
     except Exception as e:
         logger.error(f"Error in evaluation: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Get port from Railway
+port = int(os.getenv("PORT", 8000))
+
+# At the bottom of app.py, add this if you're running the app directly:
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=port)
